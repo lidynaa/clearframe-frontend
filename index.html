@@ -1003,7 +1003,11 @@
 <script>
   // ─── CONFIG ───
   // IMPORTANT: Change this to your backend URL after deployment
-  const API_BASE = 'https://clearframe-backend-pgkv.onrender.com';
+  const API_BASE = 'https://YOUR-BACKEND-URL.onrender.com';
+
+  // ─── WAKE UP BACKEND ON PAGE LOAD ───
+  // Silently pings the server so it's already awake by the time the user uploads
+  fetch(`${API_BASE}/api/health`).catch(() => {});
 
   // ─── STATE ───
   let selectedFile = null;
@@ -1108,22 +1112,34 @@
   });
 
   function pollStatus() {
+    // Smoothly animate progress while waiting
+    let fakeProgress = 20;
+    const fakeTimer = setInterval(() => {
+      if (fakeProgress < 85) {
+        fakeProgress += (85 - fakeProgress) * 0.03; // Slows down as it approaches 85%
+        progressFill.style.width = fakeProgress + '%';
+        progressPct.textContent = Math.round(fakeProgress) + '%';
+      }
+    }, 400);
+
     pollInterval = setInterval(async () => {
       try {
         const res = await fetch(`${API_BASE}/api/status/${currentJobId}`);
         const data = await res.json();
+        const msg = data.message || '';
 
         if (data.status === 'queued') {
-          setProgress(15, 'Queued…', 'Waiting for processing slot…');
+          progressStatus.textContent = '⏳ Server is warming up — almost ready…';
         } else if (data.status === 'processing') {
-          const p = Math.max(data.progress || 30, 30);
-          setProgress(p, 'Removing text…', 'FFmpeg is cleaning your video…');
+          progressStatus.textContent = '⚙️ ' + (msg || 'Removing text from every frame…');
         } else if (data.status === 'done') {
           clearInterval(pollInterval);
-          setProgress(100, 'Done!', 'Text removed successfully.');
+          clearInterval(fakeTimer);
+          setProgress(100, 'Done!', '✅ Text removed successfully!');
           setTimeout(() => showDownload(), 500);
         } else if (data.status === 'error') {
           clearInterval(pollInterval);
+          clearInterval(fakeTimer);
           showError(data.error || 'An error occurred during processing.');
           processBtn.disabled = false;
           progressWrap.classList.remove('show');
